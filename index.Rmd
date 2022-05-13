@@ -1,0 +1,355 @@
+---
+title: "PSY341K Machine Learning: Ecommerce Project"
+author: "Jas Dinh, Huy Nguyen, Yaning Zhu"
+date: '2022-04-26'
+output: rmdformats::readthedown
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE)
+```
+
+## Introduction
+
+Due to the outbreak of COVID-19 and lockdown, e-commerce increased in popularity. Retailers and manufacturers had to be adaptable to fulfill changing demands, manage inventory levels, and improve their online shopping experience as buyers stayed at homes and minimized their travels to physical locations. According to the US Census Bureau (2022), e-commerce accounted for around 11% of all retail sales in 2019. By the end of the second quarter of 2020, e-commerce had risen to more than 16% of overall retail sales.
+
+In order to keep up with demand and sustain inventory levels fueled by the e-commerce boom, retailers generated different strategies for efficient, dependable, and cost-effective means to move a massive volume of freight. As a result, discovering the factors influencing whether a product will arrive on time is crucial. In this project, we aim to investigate the factors influencing whether a package will arrive on time utilizing machine learning algorithms. We conducted *exploratory analysis*, *feature selection*, *dimensionality reduction*, *predictive modeling*, and *boosting* to improve algorithm accuracy.
+
+**Research Question:** What factors influence whether a package arrives on time or not? \n
+**Machine Learning Solution:** Create a model predicting whether a package will arrive on time
+
+
+## Data Wrangling 
+
+```{r importsW}
+library(readr)
+
+ecom <- read_csv("DataSets/Train.csv") # original dataset
+head(ecom)
+```
+The dataset consists of 12 variables. First, there is the **ID** variable identifying the package order. There are the categorical variables of **warehouse** where the package was stored (labeled A to F),  **mode** of shipment (Flight, Ship, or Road), **gender** of customer, and product **importance** rated by customer (Low, Medium, High). Then, there are the numerical variables of the number of customer care **calls** received about the package, customer **rating** of the package, **cost** of the product, number of prior **purchases** of the customer, **discount** offered on the product, and **weight** of the package. Lastly, there is the binary variable of whether the package arrived **on time** and this is the variable we will be conducting our binary classification.
+
+The data wrangling was conducted in R and Excel. The ordinal categorical variables were converted into numerical variables. For example, product importance ranges from low, medium, to high and we converted all lows to 0, mediums to 1, and highs to 2. Nominal categorical variables such as warehouse and mode were removed for models analyzing numerical variables.
+
+The dataset was also randomized and split into a training dataset of 7000 points and a testing set of 3999 points for the predictive models.
+
+
+## Exploratory Analysis: Cluster Analysis 
+
+I ran a cluster analysis with numerical variables and ordinal categorical variables (so removing warehouse and mode).
+
+```{r importC}
+library(gt)
+library(cluster)
+library(GGally)
+library(dplyr)
+
+ecomNum <- read_csv("DataSets/numerEcom.csv") # dataset with vars converted to numeric
+ecomNum <- ecomNum %>% select(calls, rating, cost, purchases, importance, Gender, discount, weight, onTime)
+```
+
+
+```{r clusterCount}
+sil_width <- vector()
+for (i in 2:10) {
+  kms <- kmeans(ecomNum, centers = i)
+  sil <- silhouette(kms$cluster, dist(ecomNum))
+  sil_width[i] <- mean(sil[, 3])
+}
+ggplot() + geom_line(aes(x = 1:10, y = sil_width)) + scale_x_continuous(name = "k", breaks = 1:10)
+```
+
+We can see that 2 clusters is most optimal by measuring the silhouette width.
+
+
+```{r clusterStats}
+
+k = 2
+myclusters <- kmeans(ecomNum, k)
+
+myclusters$size
+myclusters$centers
+
+```
+
+Here we can see that one cluster has 4,402 observations while the other cluster has 6597 observations. The center of the clusters vary most with discount offered, weight in grams, and whether the package reached on time.
+
+## Feature Selection: Scatterplot Correlation Matrix 
+
+```{r clusterMatrix}
+ecomNum %>% mutate(cluster = as.factor(myclusters$cluster)) %>% 
+    ggpairs(aes(color = cluster), upper = list(continuous = wrap("cor", size = 2.5)))  + 
+  theme(axis.line=element_blank(),
+        axis.text=element_blank(),
+        axis.ticks=element_blank()) + labs(title = "Scatterplot Correlation Matrix")
+```
+
+
+Whether the package arrived on time is significantly correlated with calls, cost, past purchases, discount, and weight. From the correlation with whether the package reached on time, it seems that rating and gender have an insignificant correlation and importance of the package has a weak correlation.
+
+### Findings
+
+After running the cluster analysis, cluster 2 stood out because it was correlated with high percentage of the package being received on time and has the characteristics of high discount and low weight compared to cluster 1. 
+
+To keep the variance, a Principal Component Analysis will be conducted. However, the rating and gender variables will be removed because there was no correlation with the onTime variable or between clusters.
+
+Other significant findings include that cost and calls are positively correlated, weight and calls are negatively correlated, and weight and discount are negatively correlated.
+
+## Dimensionality Reduction: Principal Component Analysis 
+
+### Calculating PCA in Python 
+
+To view the principal component analysis, view the Python Colab Notebook here: 
+
+https://colab.research.google.com/drive/1kizyWORPAvHBI1VIdyWItLIV20FMN0Rc?usp=sharing
+
+### PCA Loadings 
+
+```{r loadingsPCA}
+ecomNum2 <- ecomNum %>% select(calls, cost, purchases, importance, discount, weight)
+pcas <- princomp(ecomNum2, cor = T)
+summary(pcas, loadings = T)
+```
+
+Here we can see that the first component consists of a high number of calls, costs, and low weight, the second component consists of low discount and high weight, the third component consists of low purchases and low importance, and the fourth component consists of high ocst, low purchases, and high importance.
+
+```{r loadViz}
+pcas$scores %>%
+  as.data.frame %>%
+  mutate(onTime = ecomNum$onTime) %>%
+  ggplot(aes(x = Comp.1, y = onTime)) + geom_point() +
+  geom_smooth(method = "glm")
+pcas$scores %>%
+  as.data.frame %>%
+  mutate(onTime = ecomNum$onTime) %>%
+  ggplot(aes(x = Comp.2, y = onTime)) + geom_point() +
+  geom_smooth(method = "glm")
+pcas$scores %>%
+  as.data.frame %>%
+  mutate(onTime = ecomNum$onTime) %>%
+  ggplot(aes(x = Comp.3, y = onTime)) + geom_point() +
+  geom_smooth(method = "glm")
+pcas$scores %>%
+  as.data.frame %>%
+  mutate(onTime = ecomNum$onTime) %>%
+  ggplot(aes(x = Comp.4, y = onTime)) + geom_point() +
+  geom_smooth(method = "glm")
+```
+
+After analyzing the effect of each component with the onTime variable, the second component stands out. The linear model shows that a stronger second component leads to the package becoming less likely to arrive on time. These results mirror the cluster analysis as the second component is correlated with a low discount, high weight, and the package not arriving on time.
+
+## Predictive Modeling: KNN 
+
+We used the training dataset to build the classification system and then used the knn to predict/classify the testing dataset as “on time” or not "on time” based on the neighbors in the training dataset.
+
+```{r importsKNN}
+library(class)
+library(gmodels)
+
+ecommerce <- read.csv("DataSets/ecommerceconverted_1.csv", header = TRUE)
+```
+
+
+We tested different k numbers to figure out which would allow the highest accuracy for our system which we found was k = 3.
+
+### Non-Normalized Data
+
+```{r bestK}
+# wrangling
+ecommerce_train <- ecommerce[1:7000, ]
+ecommerce_test <- ecommerce[7001:10999, ]
+ecommerce_train_labels <- ecommerce[1:7000, 9]
+ecommerce_test_labels <- ecommerce[7001:10999, 9]
+
+# finding k
+accuracy <- vector()
+for (i in seq(1, 11, by = 2)) {
+  ecommerce_pred <- knn(train = ecommerce_train, test = ecommerce_test, cl = ecommerce_train_labels, k = i)
+  accuracy[i] <- length(which(ecommerce_test_labels == ecommerce_pred)) /length(ecommerce_pred)
+}
+df <- data.frame(x= 1:11, y = accuracy)
+ggplot(df, aes(x = x, y = y)) + geom_point() + geom_line(data=df[!is.na(df$y),]) + labs(x = "K Neighbors", y = "Accuracy")
+```
+
+
+When testing the model, it performed with 65.77% accuracy.
+
+```{r knnAcc}
+# testing
+ecommerce_pred <- knn(train = ecommerce_train, test = ecommerce_test, cl = ecommerce_train_labels, k = 3)
+CrossTable(x = ecommerce_test_labels, y= ecommerce_pred, prop.chisq = FALSE)
+```
+
+### Normalized Data
+
+```{r norm}
+# wrangling and normalizing
+ecommerce <- read.csv("DataSets/ecommerceconverted_1.csv", header = TRUE)
+normalize <- function(x) {
+  return ((x - min(x)) / (max(x) - min(x)))
+}
+ecommerce_n <- as.data.frame(lapply(ecommerce[1:8], normalize))
+ecommerce_n_with_time <- cbind(ecommerce_n,ecommerce[c(9)])
+
+ecommerce_train <- ecommerce_n[1:7000, ]
+ecommerce_test <- ecommerce_n[7001:10999, ]
+ecommerce_train_labels <- ecommerce_n_with_time[1:7000, 9]
+ecommerce_test_labels <- ecommerce_n_with_time[7001:10999, 9]
+
+# finding k
+accuracy <- vector()
+for (i in seq(1, 11, by = 2)) {
+  ecommerce_pred <- knn(train = ecommerce_train, test = ecommerce_test, cl = ecommerce_train_labels, k = i)
+  accuracy[i] <- length(which(ecommerce_test_labels == ecommerce_pred)) /length(ecommerce_pred)
+}
+df <- data.frame(x= 1:11, y = accuracy)
+ggplot(df, aes(x = x, y = y)) + geom_point() + geom_line(data=df[!is.na(df$y),]) + labs(x = "K Neighbors", y = "Accuracy")
+
+# testing
+ecommerce_pred <- knn(train = ecommerce_train, test = ecommerce_test, cl = ecommerce_train_labels, k = 3)
+CrossTable(x = ecommerce_test_labels, y= ecommerce_pred, prop.chisq = FALSE)
+
+```
+
+
+Although the data was normalized, the KNN performed worse at 63.3% accuracy.
+
+### Principal Components
+
+```{r pcaKNN}
+# wrangling
+trainPCA <- read.csv("DataSets/trainPCA.csv", header = TRUE)
+testPCA <- read.csv("DataSets/testPCA.csv", header = TRUE)
+
+trainPCA <- trainPCA %>% select(-1)
+testPCA <- testPCA %>% select(-1)
+
+ecommerce_trainpca_with_time <- cbind(trainPCA, onTime = ecommerce[1:7000, 9])
+ecommerce_testpca_with_time <- cbind(testPCA, onTime = ecommerce[7001:10999, 9])
+ecommerce_pca_train_labels <- ecommerce_trainpca_with_time[, 5]
+ecommerce_pca_test_labels <- ecommerce_testpca_with_time[, 5]
+
+# finding k
+accuracy <- vector()
+for (i in seq(1, 29, by = 2)) {
+  ecommerce_pred <- knn(train = trainPCA, test = testPCA, cl = ecommerce_pca_train_labels, k = i)
+  accuracy[i] <- length(which(ecommerce_pca_test_labels == ecommerce_pred)) /length(ecommerce_pred)
+}
+df <- data.frame(x= 1:29, y = accuracy)
+ggplot(df, aes(x = x, y = y)) + geom_point() + geom_line(data=df[!is.na(df$y),]) + labs(x = "K Neighbors", y = "Accuracy")
+
+# testing
+ecommerce_pca_pred <- knn(train = trainPCA, test = testPCA, cl = ecommerce_pca_train_labels, k = 25)
+CrossTable(x = ecommerce_pca_test_labels, y= ecommerce_pca_pred, prop.chisq = FALSE)
+```
+
+The model using the principal components performed better at 66.69% accuracy.
+
+## Predictive Modeling: Decision Tree 
+
+To see if there is a model that performs better than the KNN, we ran a decision tree model and generated a rule set from the decision tree. Especially since the KNN only considers numerical variables, we aimed to include the categorical variables we have removed initially such as warehouse and mode. 
+
+```{r importsTree, show_col_types = FALSE}
+library(C50)
+library(dplyr)
+library(gmodels)
+
+ecomTrain <- read_csv("DataSets/ecomTrain.csv")
+ecomTest <- read_csv("DataSets/ecomTest.csv")
+```
+
+### Decision Tree
+
+```{r decisionTree}
+ecomTrain2 <- ecomTrain %>% select(-rating, -gender, -onTime)
+# create decision tree model and classify as onTime
+model <- C5.0(ecomTrain2, as.factor(ecomTrain$onTime))
+summary(model)
+# Algorithm Accuracy: 70.5%
+
+# predict with test data set
+ecomTest2 <- ecomTest %>% select(-rating, -gender, -onTime)
+pred <- predict(model, ecomTest2)
+# Tested Accuracy : 68.7%
+CrossTable(ecomTest$onTime, pred, prop.chisq = FALSE, prop.c = FALSE, 
+           prop.r = FALSE, dnn = c('Actual', 'Predicted'))
+
+# adaptive boosting by 10 trials
+boost10 <- C5.0(ecomTrain2, as.factor(ecomTrain$onTime), trials = 10)
+#summary(boost10)
+boost10$boostResults
+# Algorithm Accuracy: 70.8%
+predboost10 <- predict(boost10, ecomTest2)
+CrossTable(ecomTest$onTime, predboost10, prop.chisq = FALSE, prop.c = FALSE, 
+           prop.r = FALSE, dnn = c('Actual', 'Predicted'))
+# Result: 68.1% Accuracy
+```
+
+The decision tree performed slightly better than the KNN model with 70.5% accuracy of the model and when using Adaptive Boosting, the model accurately predicted 70.8% of the data. However, when testing the performance of the models with the test dataset, the decision tree without boosting performed the best at 68.7% accuracy.
+
+The variables with the most information gain was the discount, weight, and warehouse of the package.
+
+It was odd that the boosting algorithm only improved the model slightly. Taking a closer look at the decision tree we created, there were 57 nodes but only 16 of those nodes were supported by data. The rest of the nodes used a default value. In order to improve this model, more data is needed as our dataset consists of packages with similar characteristics.
+
+### Rule Set
+
+To try a variation of the decision tree, we created a rule set that was derived from the structure of the tree. Compared to the decision tree that follows one rule and goes down one branch, rule sets apply multiples rules to the data point and weighs each rule to classify the data.
+
+
+```{r ruleSet}
+ecomTrain3 <- ecomTrain %>% select(-rating, -gender, -onTime, -mode)
+
+# create decision tree model and classify as onTime
+model3 <- C5.0(ecomTrain3, as.factor(ecomTrain$onTime), rules = TRUE)
+summary(model3)
+# Algorithm Accuracy: 69.6%
+
+# predict with test dataset
+ecomTest3 <- ecomTest %>% select(-rating, -gender, -onTime, -mode)
+pred3 <- predict(model3, ecomTest3)
+
+# Tested Accuracy: 68.1%
+CrossTable(ecomTest$onTime, pred3, prop.chisq = FALSE, prop.c = FALSE, 
+           prop.r = FALSE, dnn = c('Actual', 'Predicted'))
+
+# adaptive boosting by 14 trials
+boost14 <- C5.0(ecomTrain3, as.factor(ecomTrain$onTime), trials = 14, rules = TRUE)
+#summary(boost14)
+boost14$boostResults
+# Boosted Algorithm Accuracy: 70%
+predboost14 <- predict(boost14, ecomTest3)
+CrossTable(ecomTest$onTime, predboost14, prop.chisq = FALSE, prop.c = FALSE, 
+           prop.r = FALSE, dnn = c('Actual', 'Predicted'))
+# Result: 67.5% Accuracy
+```
+
+The rule set did not perform significantly better at 67.5% accuracy.
+
+## Results
+
+Of the three predictive models we created - KNN, Decision Tree, and Rule Set, the decision tree model performed the best in testing at 68.7% accuracy. From this model and the analysis we ran, we can see that discount, weight, and warehouse most signficantly impact whether a package arrives on time. We were surprised to see that mode of shipment had little effect on the arrival of the package as we expected more variation between the different modes. 
+
+In more detail, a package is likely not to arrive on time if it there was less than a 10% discount offered on the package, the weight was less than 2000 or greater than 4000, and the package came from warehouse F. 
+
+```{r concludingViz}
+# warehouse
+tab <- data.frame(table(warehouse = ecom$Warehouse_block, onTime = as.logical(ecom$Reached.on.Time_Y.N)))
+tab %>% ggplot() + geom_bar(aes(x = warehouse, y = Freq, fill = onTime), stat = "identity", position = "dodge") + ggtitle("Distribution of Packages per Warehouse") + xlab("Warehouses") + ylab("Total Packages") + labs(fill= "Package Arrived on Time")
+
+# discount v weight
+ecom %>% ggplot(aes(x = Discount_offered, y = Weight_in_gms)) + geom_point(aes(color = as.logical(Reached.on.Time_Y.N))) + ggtitle("Discount Vs Weight") + xlab("Discount Offered") + ylab("Weight (grams)") + labs(color = "Package Arrived on Time")
+```
+
+The implications of research suggest that warehouse F is overloaded with packages compared to other warehouses but does not necessarily have a higher rate of packages not arriving on time. Moreover, a little to no discount on an item most likely suggests that there is not much of the item in supply compared to an item with a high discount offered. It is possibly that a lower discount signifies less of the product available, leading to the package not arriving on time. Additionally, packages that are extremely light could have been misplaced while packages that are extremely heavy could have had difficulties in transportation which lead to the package not arriving on time. 
+
+Overall, it is the interaction of discount, weight, and warehouse among many variables that account for the arrival of the package. With the predictive models created, the company can identify packages that are at risk and take more care in seeing that it arrives on time.
+
+## Reflection
+
+Through this project, we were able to see the strengths and weaknesses of each algorithm. With cluster analysis and principal component analysis, we were limited to numerical variables but able to understand more about the patterns in the data. With the KNN and decision tree model, more data is needed to improve the accuracy of the classification algorithm and our highest performance was 68.7% in accuracy which is slightly better than random guessing of 50%. The decision tree model performed slightly better than the KNN model and this could be due to the inclusion of categorical variables in analysis.
+
+We were surprised to see that techniques such as normalization of the data in the KNN and AdaBoost for the decision tree did not lead to a major improvement in algorithm accuracy. This could be due to human error or that our dataset was too small. 
+
+For future study, we would like to gather more data to train our model and investigate confounding variables such as weather or location of customer. It would also be interesting to see time-series data of the packages as online ordering tends to increase around the holiday season which could impact arrival time. 
+
+In this project, we learned the applications of Big Data in machine learning and the importance of trying different algorithms to find the highest accuracy in predictive modeling.
