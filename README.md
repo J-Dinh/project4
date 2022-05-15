@@ -6,7 +6,7 @@ This research report is the capstone project for PSY341K and applies a machine l
 We investigated the factors influencing whether a package arrives on time in the ecommerce industry.
 
 
-Files:
+Files:  
 DataSets folder - Processed Datasets (original found on Kaggle.com)  
 Descriptive Statistics Report - Pandas Profiling Report for descriptive analysis  
 psy3411mlboostviz - pdf image of boosted decision tree visualization  
