@@ -7,9 +7,9 @@ We investigated the factors influencing whether a package arrives on time in the
 
 
 Files:
-DataSets folder - Processed Datasets (original found on Kaggle.com) \n
-Descriptive Statistics Report - Pandas Profiling Report for descriptive analysis \n
-psy3411mlboostviz - pdf image of boosted decision tree visualization \n
-psy3411mltreeviz - pdf image of unboosted decision tree visualization \n
-PSY341KmlProj - html and rmd of final report \n
-pca - contains PCA python script \n
+DataSets folder - Processed Datasets (original found on Kaggle.com)  
+Descriptive Statistics Report - Pandas Profiling Report for descriptive analysis  
+psy3411mlboostviz - pdf image of boosted decision tree visualization  
+psy3411mltreeviz - pdf image of unboosted decision tree visualization  
+PSY341KmlProj - html and rmd of final report  
+pca - contains PCA python script  
