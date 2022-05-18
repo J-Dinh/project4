@@ -15,7 +15,8 @@ Due to the outbreak of COVID-19 and lockdown, e-commerce increased in popularity
 
 In order to keep up with demand and sustain inventory levels fueled by the e-commerce boom, retailers generated different strategies for efficient, dependable, and cost-effective means to move a massive volume of freight. As a result, discovering the factors influencing whether a product will arrive on time is crucial. In this project, we aim to investigate the factors influencing whether a package will arrive on time utilizing machine learning algorithms. We conducted *exploratory analysis*, *feature selection*, *dimensionality reduction*, *predictive modeling*, and *boosting* to improve algorithm accuracy.
 
-**Research Question:** What factors influence whether a package arrives on time or not? \n
+**Research Question:** What factors influence whether a package arrives on time or not?   \n  
+
 **Machine Learning Solution:** Create a model predicting whether a package will arrive on time
 
 
